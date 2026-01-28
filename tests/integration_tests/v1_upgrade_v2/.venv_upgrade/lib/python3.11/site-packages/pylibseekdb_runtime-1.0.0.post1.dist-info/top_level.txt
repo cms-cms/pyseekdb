@@ -1,0 +1,2 @@
+pylibseekdb_runtime
+seekdb_lib

@@ -1,0 +1,9 @@
+{
+  "v1_collection_name": "upgrade_test_v1",
+  "v1_ids": [
+    "v1_id1",
+    "v1_id2"
+  ],
+  "path": "/home/chenminsi.cms/pyseekdb/tests/v1_upgrade_v2/upgrade_test_db/seekdb.db",
+  "database": "test"
+}
