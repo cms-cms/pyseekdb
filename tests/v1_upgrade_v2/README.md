@@ -33,10 +33,12 @@ python3.11 -m pytest tests/v1_upgrade_v2/ -v -s
 Or with explicit env:
 
 ```bash
-export SEEKDB_PATH=/path/to/seekdb.db
+export SEEKDB_PATH=/path/to/seekdb.db   # default: tests/seekdb.db
 export SEEKDB_DATABASE=test
 ./tests/v1_upgrade_v2/run_upgrade_test.sh
 ```
+
+By default the script uses `tests/seekdb.db` as the database (same as integration_tests) and creates/uses the virtual env at `/home/chenminsi.cms/.venv_upgrade`. Override with `VENV_UPGRADE_DIR` if needed.
 
 Requires `python3.11` and network (for pip).
 

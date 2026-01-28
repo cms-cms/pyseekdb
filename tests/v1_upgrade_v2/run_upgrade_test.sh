@@ -13,14 +13,12 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UPGRADE_DB_DIR="${SCRIPT_DIR}/upgrade_test_db"
-VENV_DIR="${SCRIPT_DIR}/.venv_upgrade"
-
-if [ -z "${SEEKDB_PATH}" ]; then
-  rm -rf "${UPGRADE_DB_DIR}"
-fi
-SEEKDB_PATH="${SEEKDB_PATH:-${UPGRADE_DB_DIR}/seekdb.db}"
+# Use tests/seekdb.db (same as integration_tests default)
+TESTS_DIR="${SCRIPT_DIR}/.."
+SEEKDB_PATH="${SEEKDB_PATH:-${TESTS_DIR}/seekdb.db}"
 SEEKDB_DATABASE="${SEEKDB_DATABASE:-test}"
+# Virtual env moved to home to avoid large venv under repo
+VENV_DIR="${VENV_UPGRADE_DIR:-/home/chenminsi.cms/.venv_upgrade}"
 
 export SEEKDB_PATH
 export SEEKDB_DATABASE
