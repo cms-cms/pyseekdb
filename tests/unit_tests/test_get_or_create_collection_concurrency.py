@@ -275,6 +275,13 @@ class TestCollectionCatalogBootstrap:
         assert _is_catalog_bootstrap_transient_error(outer)
         assert not _is_catalog_bootstrap_transient_error(RuntimeError('(1142, "SELECT command denied")'))
 
+    def test_embedded_table_missing_error_format_is_transient(self):
+        """Embedded reports symbolic names followed by a parenthesized numeric code."""
+        exc = RuntimeError("execute sql failed OB_TABLE_NOT_EXIST(1146): Table '%s.%s' doesn't exist")
+
+        assert _is_catalog_table_missing_error(exc)
+        assert _is_catalog_bootstrap_transient_error(exc)
+
 
 class TestCollectionConflictDetection:
     """TestCollectionConflictDetection class."""

@@ -183,6 +183,7 @@ def _has_database_error_code(exc: BaseException, error_codes: tuple[int, ...]) -
         for error_code in error_codes:
             if (
                 f"({error_code}," in message
+                or f"({error_code})" in message
                 or f"code={error_code}" in message
                 or f"code: {error_code}" in message
                 or f"errno {error_code}" in message
