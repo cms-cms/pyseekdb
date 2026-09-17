@@ -57,10 +57,17 @@ def error_details(error):
 
 
 def capture_logs(root, evidence, label, traces=(), budget=128 * 1024 * 1024, output_limit=2 * 1024 * 1024):
-    """Read bounded tails by total bytes, never discard a large rotated file."""
-    patterns = [value.encode() for value in traces] + [
-        b"ret=-4016",
-        b"read_barrier_",
+    """Scan once under a byte budget; prioritize errors over routine context.
+
+    Each priority buffer is bounded by output_limit (at most 4x that limit in
+    memory). A full low-priority buffer must not stop the scan: the failing
+    trace can occur later in a large, noisy rotated log.
+    """
+    if budget < 0 or output_limit <= 0:
+        raise ValueError("invalid diagnostic byte budget")
+    trace_patterns = [value.encode() for value in traces if value]
+    error_patterns = [
+        b"-4016",
         b"data/schema type does not match",
         b"failed to get next row from memtable scanner",
         b"ob_memtable_key.h",
@@ -70,43 +77,66 @@ def capture_logs(root, evidence, label, traces=(), budget=128 * 1024 * 1024, out
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
-    inventory, written = [], 0
+    inventory = []
+    priorities = ("trace-error", "trace", "error", "memtable-context")
+    buffers = [bytearray() for _ in priorities]
+    matched = [0] * len(priorities)
+    capped = [False] * len(priorities)
+
+    def append(priority, content):
+        available = output_limit - len(buffers[priority])
+        if len(content) > available:
+            capped[priority] = True
+        buffers[priority].extend(content[:available])
+
+    for path in files:
+        size = path.stat().st_size
+        count = min(size, budget)
+        inventory.append({"path": str(path), "size": size, "read_bytes": count})
+        if not count:
+            continue
+        with path.open("rb") as stream:
+            stream.seek(size - count)
+            previous, following, remaining = collections.deque(maxlen=5), 0, count
+            context_priority = 3
+            while remaining > 0:
+                line = stream.readline(min(65536, remaining))
+                if not line:
+                    break
+                remaining -= len(line)
+                is_trace = any(pattern in line for pattern in trace_patterns)
+                is_error = any(pattern in line for pattern in error_patterns)
+                priority = (
+                    0
+                    if is_trace and is_error
+                    else 1 if is_trace else 2 if is_error else 3 if b"read_barrier_:true" in line else None
+                )
+                if priority is not None:
+                    # Preserve the matching line before optional context so
+                    # a huge preceding SQL line cannot consume the budget.
+                    context = f"\nFILE={path}\n".encode() + line + b"[preceding context]\n" + b"".join(previous)
+                    matched[priority] += 1
+                    append(priority, context)
+                    following, context_priority = 5, priority
+                elif following:
+                    append(context_priority, line)
+                    following -= 1
+                previous.append(line)
+        budget -= count
+    written = 0
     with (evidence / f"{label}-db-context.log").open("wb") as output:
-        for path in files:
-            size = path.stat().st_size
-            count = min(size, budget)
-            inventory.append({"path": str(path), "size": size, "read_bytes": count})
-            if not count:
-                continue
-            with path.open("rb") as stream:
-                stream.seek(size - count)
-                previous, following, remaining = collections.deque(maxlen=5), 0, count
-                while remaining > 0:
-                    line = stream.readline(min(65536, remaining))
-                    if not line:
-                        break
-                    remaining -= len(line)
-                    if any(pattern in line for pattern in patterns):
-                        # Preserve the matching line before optional context so
-                        # a huge preceding SQL line cannot consume the budget.
-                        context = f"\nFILE={path}\n".encode() + line + b"[preceding context]\n" + b"".join(previous)
-                        part = context[: max(0, output_limit - written)]
-                        output.write(part)
-                        written += len(part)
-                        following = 6
-                    if following:
-                        part = line[: max(0, output_limit - written)]
-                        output.write(part)
-                        written += len(part)
-                        following -= 1
-                    previous.append(line)
-            budget -= count
+        for content in buffers:
+            part = content[: max(0, output_limit - written)]
+            output.write(part)
+            written += len(part)
     (evidence / f"{label}-log-inventory.json").write_text(
         json.dumps(
             {
                 "files": inventory,
                 "context_bytes": written,
                 "context_capped": written >= output_limit,
+                "priority_matches": dict(zip(priorities, matched, strict=True)),
+                "priority_capped": dict(zip(priorities, capped, strict=True)),
                 "scan_capped": any(item["read_bytes"] < item["size"] for item in inventory),
             },
             indent=2,

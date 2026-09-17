@@ -2,7 +2,10 @@
 
 import importlib.util
 import json
+import threading
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -91,11 +94,57 @@ def test_first_failure_is_captured_immediately_and_never_reset(tmp_path):
     assert recorder.first["error_codes"] == [4016]
 
 
+def test_early_trace_error_wins_over_noise_and_other_errors(tmp_path):
+    trace = "YB427F000001-00065BA8AA327DFF-0-0"
+    # All lower-priority buffers fill before the failing trace is encountered.
+    noise = (
+        "read_barrier_:false ordinary INFO\n" * 200
+        + "read_barrier_:true release_head_memtable_\n" * 200
+        + "ret=-4016 unrelated session\n" * 200
+        + f"[{trace}] normal statement context\n" * 200
+    )
+    failure = f"[{trace}] send_error_packet ob_error=-4016\n"
+    (tmp_path / "seekdb.log").write_text(noise + failure)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    recorder = fts.Recorder(tmp_path, evidence)
+    # Exercise the real immediate-error entry point, not just final collection.
+    original = fts.capture_logs
+    from unittest.mock import patch
+
+    with patch.object(fts, "capture_logs", side_effect=lambda *args: original(*args, output_limit=1024)):
+        recorder.error(RuntimeError(f"code=4016 [{trace}]"), "scan")
+    context = (evidence / "early-db-context.log").read_text()
+    assert failure in context
+    assert context.index(failure) < context.index("[preceding context]")
+    assert not (evidence / "summary.json").exists()
+    inventory = json.loads((evidence / "early-log-inventory.json").read_text())
+    assert inventory["priority_matches"]["trace-error"] == 1
+    assert inventory["priority_capped"]["memtable-context"]
+    assert inventory["context_bytes"] <= 1024
+
+
+def test_false_read_barrier_alone_does_not_consume_output(tmp_path):
+    (tmp_path / "seekdb.log").write_text("read_barrier_:false ordinary INFO\n" * 100)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    fts.capture_logs(tmp_path, evidence, "early", output_limit=128)
+    assert (evidence / "early-db-context.log").read_bytes() == b""
+
+
 def test_scan_freeze_uses_separate_connections_and_no_vector_index(tmp_path, monkeypatch):
     # Shorten only this harness unit test, not the real integration defaults.
     for key, value in (("ROWS", 20), ("WORKERS", 2), ("SECONDS", 0.03), ("INTERVAL", 0.005)):
         monkeypatch.setattr(fts, key, value)
     clients = []
+    # Fake queries do no I/O and can monopolize the GIL for the entire 30ms
+    # window. Model one completed round deterministically instead of depending
+    # on OS scheduling. This clock is local to the fake-client unit test only.
+    first_round = threading.Event()
+    round_barrier = threading.Barrier(fts.WORKERS + 1, action=first_round.set)
+    monkeypatch.setattr(
+        fts, "time", SimpleNamespace(time=time.time, monotonic=lambda: fts.SECONDS if first_round.is_set() else 0.0)
+    )
 
     class Client:
         def __init__(self):
@@ -105,6 +154,8 @@ def test_scan_freeze_uses_separate_connections_and_no_vector_index(tmp_path, mon
 
         def _execute(self, sql):
             self.commands.append(sql)
+            if sql == fts.SEARCH or sql == "ALTER SYSTEM MINOR FREEZE":
+                round_barrier.wait(timeout=5)
             if sql.startswith("SHOW CREATE"):
                 return [("fixture", "CREATE TABLE fixture (... FULLTEXT ...)")]
             if sql.startswith("SELECT COUNT"):
