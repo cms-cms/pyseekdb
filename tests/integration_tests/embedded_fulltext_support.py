@@ -51,6 +51,9 @@ def error_details(error):
         if error.args and isinstance(error.args[0], int):
             codes.append(error.args[0])
         codes.extend(int(value) for value in re.findall(r"\bcode[=:]\s*(-?\d+)\b", str(error)))
+        # Released bindings may expose a RuntimeError rather than numeric args,
+        # e.g. "execute sql failed OB_ERR_UNEXPECTED(4016): %s".
+        codes.extend(int(value) for value in re.findall(r"\bOB_[A-Z0-9_]+\((-?\d+)\)", str(error)))
         error = error.__cause__ or error.__context__
     text = "\n".join(chain)
     return {"exception_chain": chain, "error_codes": sorted(set(codes)), "trace_ids": sorted(set(TRACE.findall(text)))}
@@ -109,7 +112,13 @@ def capture_logs(root, evidence, label, traces=(), budget=128 * 1024 * 1024, out
                 priority = (
                     0
                     if is_trace and is_error
-                    else 1 if is_trace else 2 if is_error else 3 if b"read_barrier_:true" in line else None
+                    else 1
+                    if is_trace
+                    else 2
+                    if is_error
+                    else 3
+                    if b"read_barrier_:true" in line
+                    else None
                 )
                 if priority is not None:
                     # Preserve the matching line before optional context so

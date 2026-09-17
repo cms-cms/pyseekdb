@@ -64,6 +64,13 @@ def test_wrapped_numeric_error_is_not_inferred_from_prose():
     assert fts.error_details(RuntimeError("internal error"))["error_codes"] == []
 
 
+def test_released_binding_symbolic_error_preserves_numeric_code():
+    error = RuntimeError("Failed to execute query")
+    error.__cause__ = RuntimeError("execute sql failed OB_ERR_UNEXPECTED(4016): %s")
+    assert fts.error_details(error)["error_codes"] == [4016]
+    assert fts.error_details(RuntimeError("query ordinal4016 returned no rows"))["error_codes"] == []
+
+
 def test_large_rotated_log_uses_total_tail_budget(tmp_path):
     log = tmp_path / "seekdb.log.20260916"
     with log.open("wb") as stream:

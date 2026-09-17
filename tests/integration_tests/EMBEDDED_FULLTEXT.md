@@ -48,3 +48,27 @@ For pre/post-fix comparisons, hold this test SHA and bindings source SHA fixed,
 record the actual SeekDB REVISION inside each wheel, and change only the kernel
 source revision. Old-build failures must retain a failed result. Do not add an
 xfail or suppress 4016 to make the comparison green.
+
+## GitHub PR gate and released wheels
+
+The GitHub embedded job builds a **CI-local Linux x86_64 / CPython 3.11** wheel
+from the full SeekDB and bindings commits in `.github/embedded-source.json`.
+The pinned SeekDB commit contains the #1384 fix; the build verifies that ancestry.
+This wheel is not published and does not claim portable manylinux compatibility.
+The kernel build uses at most three workers, further limited by available RAM.
+
+The cache key includes both source pins, the build/verification scripts, Ubuntu
+22.04 and CPython 3.11. No approximate cache key is accepted. On every restore,
+CI verifies the manifest, wheel and embedded binary SHA-256 and full REVISION.
+After installation it verifies the actual installed binary again. Integration
+tests and examples use `uv run --no-sync` so the lock file cannot silently
+replace the tested wheel with the old PyPI release. All embedded tests still run;
+neither these two regressions nor database errors are skipped or marked xfail.
+
+The lock file remains unchanged for the other jobs. This source-built gate does
+**not** prove that the published wheel is fixed: run 35204502666 used the locked
+`pylibseekdb 1.3.0` and failed both new scenarios with explicit 4016 errors (one
+first-pass error and 72 scan errors, whose first error was 4016). A released wheel
+containing #1384 can replace the temporary source-build path after verification.
+Failed full-text reports and bounded database-log excerpts are uploaded as
+artifacts; whole database directories are not uploaded.
