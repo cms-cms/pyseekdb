@@ -141,6 +141,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Restore default ONNX model cache
+        if: matrix.test_mode == 'oceanbase'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pyseekdb/onnx_models
+          key: pyseekdb-onnx-all-MiniLM-L6-v2-v1
+
       - name: Restore exact embedded source wheel
         if: matrix.test_mode == 'embedded'
         id: embedded-wheel
@@ -212,6 +219,9 @@ jobs:
       - name: Run integration tests for ${{ matrix.test_mode }}
         env:
           CI: 1
+          # GitHub-hosted runners can reach the canonical endpoint reliably;
+          # avoid making the suite depend on the China mirror's DNS state.
+          HF_ENDPOINT: https://huggingface.co
           SEEKDB_TEST_DATA_ROOT: ${{ github.workspace }}/.seekdb-test-data
           OB_PORT: 10000
           SERVER_PORT: 2881
