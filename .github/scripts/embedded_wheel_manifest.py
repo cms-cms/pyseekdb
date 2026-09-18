@@ -62,7 +62,9 @@ def main():
         if digest(binary) != manifest["binary_sha256"]:
             raise ValueError("installed SeekDB differs from source-built wheel (dependency resync?)")
         # The executable is the verified local wheel payload, never shell input.
-        version = subprocess.check_output([str(binary), "-V"], text=True)  # noqa: S603
+        version = subprocess.check_output(  # noqa: S603
+            [str(binary), "-V"], text=True, stderr=subprocess.STDOUT
+        )
         if pin["seekdb_sha"] not in version:
             raise ValueError("installed SeekDB does not report pinned full REVISION")
         print(f"[EMBEDDED_WHEEL] installed={binary}")

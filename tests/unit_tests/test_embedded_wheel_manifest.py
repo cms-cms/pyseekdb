@@ -86,6 +86,38 @@ def test_dependency_resync_is_detected(bundle, monkeypatch):
         wheel_manifest.main()
 
 
+def test_installed_revision_from_stderr_is_verified(bundle, monkeypatch):
+    pin, directory, binary, _ = bundle
+    monkeypatch.setattr(
+        wheel_manifest.importlib.metadata, "distribution", lambda _: SimpleNamespace(locate_file=lambda _: binary)
+    )
+
+    def version_output(command, *, text, stderr):
+        assert command == [str(binary), "-V"]
+        assert text is True
+        assert stderr is wheel_manifest.subprocess.STDOUT
+        return f"REVISION: 1-{pin['seekdb_sha']}\n"
+
+    monkeypatch.setattr(wheel_manifest.subprocess, "check_output", version_output)
+    wheel_manifest.sys.argv = ["manifest", "installed", str(directory / "source.json"), str(directory)]
+    wheel_manifest.main()
+
+
+def test_installed_wrong_revision_is_rejected(bundle, monkeypatch):
+    _, directory, binary, _ = bundle
+    monkeypatch.setattr(
+        wheel_manifest.importlib.metadata, "distribution", lambda _: SimpleNamespace(locate_file=lambda _: binary)
+    )
+    monkeypatch.setattr(
+        wheel_manifest.subprocess,
+        "check_output",
+        lambda *_, **__: f"REVISION: 1-{'d' * 40}\n",
+    )
+    wheel_manifest.sys.argv = ["manifest", "installed", str(directory / "source.json"), str(directory)]
+    with pytest.raises(ValueError, match="pinned full REVISION"):
+        wheel_manifest.main()
+
+
 def test_incompatible_host_is_rejected(bundle, monkeypatch):
     pin, directory, _, _ = bundle
     monkeypatch.setattr(wheel_manifest.platform, "machine", lambda: "aarch64")
