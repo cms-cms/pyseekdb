@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import collections
 import importlib.metadata
+import importlib.util
 import json
 import platform
 import re
@@ -349,12 +350,15 @@ def scan_freeze(client, make_client, recorder, report):
 def run(scenario, root, evidence):
     import pyseekdb
 
+    runtime_distribution = "seekdb" if importlib.util.find_spec("seekdb") else "pylibseekdb"
+
     report = {
         "scenario": scenario,
         "completed": False,
         "platform": platform.platform(),
         "pyseekdb": importlib.metadata.version("pyseekdb"),
-        "pylibseekdb": importlib.metadata.version("pylibseekdb"),
+        "embedded_runtime": runtime_distribution,
+        "embedded_runtime_version": importlib.metadata.version(runtime_distribution),
         "corpus": "synthetic deterministic / 24515 documents",
         "workers": WORKERS,
         "duration_seconds": SECONDS,

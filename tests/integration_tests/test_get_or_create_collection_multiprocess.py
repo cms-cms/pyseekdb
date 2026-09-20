@@ -146,15 +146,16 @@ def _refresh_collection(client_config: dict[str, Any], collection_name: str) -> 
 
 def _require_embedded_pylibseekdb() -> None:
     """Require embedded pylibseekdb."""
+    runtime_distribution = "seekdb" if importlib.util.find_spec("seekdb") else "pylibseekdb"
     try:
-        import pylibseekdb  # noqa: F401
+        importlib.import_module(runtime_distribution)
     except ImportError:
         pytest.skip("seekdb embedded package is not installed")
 
     try:
-        installed_version = Version(importlib.metadata.version("pylibseekdb"))
+        installed_version = Version(importlib.metadata.version(runtime_distribution))
     except importlib.metadata.PackageNotFoundError:
-        pytest.skip("pylibseekdb is not installed")
+        pytest.skip("seekdb embedded package is not installed")
 
     if installed_version < MIN_PYLIBSEEKDB_VERSION:
         pytest.skip(
