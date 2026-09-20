@@ -6,7 +6,6 @@ for converting text documents to vector embeddings.
 """
 
 import logging
-import sys
 import warnings
 from abc import abstractmethod
 from typing import (
@@ -130,10 +129,11 @@ def dimension_of(embedding_function: EmbeddingFunction[D]) -> int:
 
 class DefaultEmbeddingFunction(EmbeddingFunction[Documents]):
     """
-    Default embedding function using ONNX runtime.
+    Default embedding function using MNN.
 
-    Uses the 'all-MiniLM-L6-v2' model via ONNX, which produces 384-dimensional embeddings.
-    This is a lightweight, fast model suitable for general-purpose text embeddings.
+    Uses the 'all-MiniLM-L6-v2' model converted from ONNX to MNN, which produces
+    384-dimensional embeddings. The source model is downloaded and converted on
+    first use, then cached locally for subsequent calls.
 
     Example:
         >>> ef = DefaultEmbeddingFunction()
@@ -143,6 +143,15 @@ class DefaultEmbeddingFunction(EmbeddingFunction[Documents]):
 
     _MODEL_NAME = "all-MiniLM-L6-v2"
     _HF_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"  # Hugging Face model ID
+    _HF_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+    _MODEL_SHA256: ClassVar[dict[str, str]] = {
+        "config.json": "953f9c0d463486b10a6871cc2fd59f223b2c70184f49815e7efbcab5d8908b41",
+        "model.onnx": "6fd5d72fe4589f189f8ebc006442dbb529bb7ce38f8082112682524616046452",
+        "special_tokens_map.json": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3",
+        "tokenizer_config.json": "acb92769e8195aabd29b7b2137a9e6d6e25c476a4f15aa4355c233426c61576b",
+        "tokenizer.json": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037",
+        "vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+    }
     _DIMENSION = 384  # all-MiniLM-L6-v2 produces 384-dimensional embeddings
 
     def __init__(
@@ -155,34 +164,27 @@ class DefaultEmbeddingFunction(EmbeddingFunction[Documents]):
 
         Args:
             model_name: str = "all-MiniLM-L6-v2",  # Deprecated. Will be removed in a future version.
-            preferred_providers: list[str] | None = None,  # Deprecated. Will be removed in a future version.
-                                # The preferred ONNX runtime providers. Defaults to None (uses available providers).
+            preferred_providers: list[str] | None = None,  # Deprecated. MNN does not expose ONNX providers.
         """
         if model_name != self._MODEL_NAME:
             raise ValueError(f"Currently only '{self._MODEL_NAME}' is supported, got '{model_name}'")
         if preferred_providers:
             warnings.warn(
                 "preferred_providers is deprecated and will be removed in a future version. "
-                "Use the preferred_providers argument of OnnxEmbeddingFunction instead.",
+                "MNN does not support ONNX provider selection; the default CPU backend is used.",
                 DeprecationWarning,
                 stacklevel=2,
             )
         self.model_name = self._MODEL_NAME
-        if sys.version_info >= (3, 14):
-            from pyseekdb.utils.embedding_functions.sentence_transformer_embedding_function import (
-                SentenceTransformerEmbeddingFunction,
-            )
+        from pyseekdb.utils.embedding_functions import MnnEmbeddingFunction
 
-            self._backend = SentenceTransformerEmbeddingFunction(model_name=self._MODEL_NAME)
-        else:
-            from pyseekdb.utils.embedding_functions import OnnxEmbeddingFunction
-
-            self._backend = OnnxEmbeddingFunction(
-                model_name=self._MODEL_NAME,
-                hf_model_id=self._HF_MODEL_ID,
-                dimension=self._DIMENSION,
-                preferred_providers=preferred_providers,
-            )
+        self._backend = MnnEmbeddingFunction(
+            model_name=self._MODEL_NAME,
+            hf_model_id=self._HF_MODEL_ID,
+            dimension=self._DIMENSION,
+            hf_revision=self._HF_REVISION,
+            expected_sha256=self._MODEL_SHA256,
+        )
 
     @property
     def dimension(self) -> int:
