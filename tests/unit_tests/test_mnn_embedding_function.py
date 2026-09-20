@@ -57,6 +57,14 @@ def test_local_model_does_not_require_huggingface_metadata(tmp_path: Path) -> No
     assert ef.hf_revision == "main"
 
 
+def test_default_cache_honors_pyseekdb_cache_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PYSEEKDB_CACHE_DIR", str(tmp_path))
+
+    ef = MnnEmbeddingFunction("test-model", "org/test-model", 3)
+
+    assert ef.download_path == tmp_path / "mnn_models" / "test-model"
+
+
 def test_hf_endpoint_must_use_https(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ef = _make_embedding_function(tmp_path)
     monkeypatch.setenv("HF_ENDPOINT", "http://example.invalid")
