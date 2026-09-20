@@ -59,15 +59,15 @@ Admin client - Database management:
 """
 
 import importlib.metadata
+import sys
 
-# Note: pylibseekdb built with ABI=0 and onnxruntime built with ABI=1, so there's a conflict between the two libraries.
-# pylibseekdb is built both with ABI=0 and the -Bsymbolic flag, so we can load libraries with ABI=1 first
-# and then pylibseekdb to avoid these conflicts.
+# pylibseekdb 1.3.x is built with ABI=0. When the optional test/compatibility
+# runtime is installed, load its ABI=1 native library before embedded clients.
 if importlib.util.find_spec("onnxruntime"):
     import onnxruntime  # noqa: F401
 
 # torch and pylibseekdb both use openmp library, which is conflict on macos.
-if importlib.util.find_spec("torch"):
+if sys.platform == "darwin" and importlib.util.find_spec("torch"):
     import torch  # noqa: F401
 
 from .client import (
