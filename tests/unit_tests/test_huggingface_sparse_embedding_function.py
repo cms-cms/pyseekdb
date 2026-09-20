@@ -194,6 +194,7 @@ class TestHuggingFaceSparseEFCall:
         arr = np.zeros(100, dtype=np.float32)
         arr[7] = 0.6
         arr[99] = 0.1
+        mock_model.encode_document.side_effect = None
         mock_model.encode_document.return_value = [arr]
 
         ef = HuggingFaceSparseEmbeddingFunction()
