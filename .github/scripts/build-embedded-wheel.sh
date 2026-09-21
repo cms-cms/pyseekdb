@@ -7,10 +7,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 [[ "$(uname -s)/$(uname -m)" == Linux/x86_64 ]]
 PYTHON="$(command -v python3)"
 "$PYTHON" -c 'import sys; assert sys.version_info[:2] == (3, 11)'
-read -r SEEKDB_SHA BINDINGS_SHA FIX_COMMIT < <(
-  "$PYTHON" -c 'import json, sys; p=json.load(open(sys.argv[1])); print(p["seekdb_sha"], p["bindings_sha"], p["fix_commit"])' \
+read -r SEEKDB_REPOSITORY SEEKDB_SHA BINDINGS_SHA FIX_COMMIT < <(
+  "$PYTHON" -c 'import json, sys; p=json.load(open(sys.argv[1])); print(p["seekdb_repository"], p["seekdb_sha"], p["bindings_sha"], p["fix_commit"])' \
     "$REPO_ROOT/.github/embedded-source.json"
 )
+[[ "$SEEKDB_REPOSITORY" == "https://github.com/cms-cms/seekdb.git" ]]
 [[ "$SEEKDB_SHA" =~ ^[0-9a-f]{40}$ && "$BINDINGS_SHA" =~ ^[0-9a-f]{40}$ && "$FIX_COMMIT" =~ ^[0-9a-f]{40}$ ]]
 BUILD_ROOT="$(mktemp -d "$RUNNER_TEMP/embedded-source.XXXXXX")"
 mkdir -p "$EMBEDDED_WHEEL_DIR"
@@ -28,7 +29,7 @@ checkout_exact() {
   git -C "$target" checkout --detach FETCH_HEAD
   [[ "$(git -C "$target" rev-parse HEAD)" == "$revision" ]]
 }
-checkout_exact https://github.com/oceanbase/seekdb.git "$SEEKDB_SHA" "$BUILD_ROOT/seekdb"
+checkout_exact "$SEEKDB_REPOSITORY" "$SEEKDB_SHA" "$BUILD_ROOT/seekdb"
 git -C "$BUILD_ROOT/seekdb" merge-base --is-ancestor "$FIX_COMMIT" HEAD
 checkout_exact https://github.com/oceanbase/seekdb-bindings.git "$BINDINGS_SHA" "$BUILD_ROOT/bindings"
 git -C "$BUILD_ROOT/bindings" submodule update --init --depth=1 deps/mariadb-connector-c
