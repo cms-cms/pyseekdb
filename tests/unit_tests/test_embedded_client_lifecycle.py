@@ -133,11 +133,9 @@ class _FakeLegacyApi:
 def embedded_module(monkeypatch: pytest.MonkeyPatch):
     """Import the embedded module without loading the native pylibseekdb extension."""
     module_name = "pyseekdb.client.client_seekdb_embedded"
-    monkeypatch.setitem(sys.modules, "seekdb", ModuleType("seekdb"))
     monkeypatch.setitem(sys.modules, "pylibseekdb", ModuleType("pylibseekdb"))
     sys.modules.pop(module_name, None)
     module = importlib.import_module(module_name)
-    assert module._EMBEDDED_RUNTIME_DISTRIBUTION == "seekdb"
     yield module
     sys.modules.pop(module_name, None)
 
@@ -145,34 +143,6 @@ def embedded_module(monkeypatch: pytest.MonkeyPatch):
 def _install_fake_seekdb(embedded_module: Any, monkeypatch: pytest.MonkeyPatch, fake_seekdb: Any) -> None:
     monkeypatch.setattr(embedded_module, "seekdb", fake_seekdb)
     monkeypatch.setattr(embedded_module, "_PYLIBSEEKDB_AVAILABLE", True)
-
-
-def test_embedded_runtime_prefers_current_seekdb_package(monkeypatch, embedded_module) -> None:
-    current = ModuleType("seekdb")
-    legacy = ModuleType("pylibseekdb")
-    modules = {"seekdb": current, "pylibseekdb": legacy}
-    monkeypatch.setattr(embedded_module.importlib, "import_module", modules.__getitem__)
-
-    runtime, distribution = embedded_module._load_embedded_runtime()
-
-    assert runtime is current
-    assert distribution == "seekdb"
-
-
-def test_embedded_runtime_falls_back_to_legacy_package(monkeypatch, embedded_module) -> None:
-    legacy = ModuleType("pylibseekdb")
-
-    def import_runtime(name: str) -> ModuleType:
-        if name == "seekdb":
-            raise ImportError(name)
-        return legacy
-
-    monkeypatch.setattr(embedded_module.importlib, "import_module", import_runtime)
-
-    runtime, distribution = embedded_module._load_embedded_runtime()
-
-    assert runtime is legacy
-    assert distribution == "pylibseekdb"
 
 
 def test_clients_use_and_close_their_own_seekdb_instances(tmp_path, monkeypatch, embedded_module) -> None:

@@ -4,7 +4,6 @@ Provides parameterized client fixtures for testing across embedded, server, and 
 """
 
 import contextlib
-import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -48,7 +47,9 @@ OB_PASSWORD = os.environ.get("OB_PASSWORD", "")
 # ==================== Client Factory Functions ====================
 def create_embedded_client():
     """Create an embedded client instance."""
-    if not any(importlib.util.find_spec(name) for name in ("seekdb", "pylibseekdb")):
+    try:
+        import pylibseekdb  # noqa: F401
+    except ImportError:
         pytest.skip("seekdb embedded package is not installed")
 
     return pyseekdb.Client(path=SEEKDB_PATH, database=SEEKDB_DATABASE)
@@ -99,7 +100,9 @@ def create_oceanbase_client():
 # ==================== AdminClient Factory Functions ====================
 def create_embedded_admin_client():
     """Create an embedded admin client instance."""
-    if not any(importlib.util.find_spec(name) for name in ("seekdb", "pylibseekdb")):
+    try:
+        import pylibseekdb  # noqa: F401
+    except ImportError:
         pytest.skip("seekdb embedded package is not installed")
 
     return pyseekdb.AdminClient(path=SEEKDB_PATH)

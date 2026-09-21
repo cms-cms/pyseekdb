@@ -84,8 +84,11 @@ class MnnEmbeddingFunction:
         self.hf_revision = hf_revision
         self._dimension = dimension
         self._expected_sha256 = dict(expected_sha256 or {})
-        cache_root = Path(os.environ.get("PYSEEKDB_CACHE_DIR", Path.home() / ".cache" / "pyseekdb"))
-        self.download_path = download_path if download_path is not None else cache_root / "mnn_models" / model_name
+        self.download_path = (
+            download_path
+            if download_path is not None
+            else Path.home() / ".cache" / "pyseekdb" / "mnn_models" / model_name
+        )
 
         # These imports are intentionally lazy so importing pyseekdb does not
         # initialize the native MNN runtime until embeddings are requested.

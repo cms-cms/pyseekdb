@@ -10,9 +10,7 @@ To run this test:
 """
 
 import importlib.util
-from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
 from pyseekdb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -44,20 +42,6 @@ def is_sentence_transformers_available() -> bool:
         True if sentence-transformers is available, False otherwise.
     """
     return importlib.util.find_spec("sentence_transformers") is not None
-
-
-@pytest.fixture(autouse=True)
-def mock_sentence_transformer():
-    """Persistence unit tests must not download real embedding models."""
-    saved = SentenceTransformerEmbeddingFunction.models.copy()
-    SentenceTransformerEmbeddingFunction.models.clear()
-    with patch("sentence_transformers.SentenceTransformer") as mock_class:
-        model = MagicMock()
-        model.encode.side_effect = lambda documents, **_kwargs: np.zeros((len(documents), 3), dtype=np.float32)
-        mock_class.return_value = model
-        yield mock_class, model
-    SentenceTransformerEmbeddingFunction.models.clear()
-    SentenceTransformerEmbeddingFunction.models.update(saved)
 
 
 @pytest.mark.skipif(

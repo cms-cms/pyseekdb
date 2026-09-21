@@ -100,11 +100,7 @@ jobs:
           bash .github/scripts/check-pytest-summary.sh pytest.log
 
   integration-test:
-    # Keep the CI-local source wheel on the same native Ubuntu image as its tests.
-    runs-on: ${{ matrix.test_mode == 'embedded' && 'ubuntu-22.04' || 'ubuntu-latest' }}
-    timeout-minutes: 180
-    env:
-      EMBEDDED_WHEEL_DIR: ${{ github.workspace }}/.embedded-wheel
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false  # Allow other jobs to continue if one fails
       matrix:
@@ -141,61 +137,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Restore default ONNX model cache
-        if: matrix.test_mode == 'oceanbase'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pyseekdb/onnx_models
-          key: pyseekdb-onnx-all-MiniLM-L6-v2-v1
-
-      - name: Restore exact embedded source wheel
-        if: matrix.test_mode == 'embedded'
-        id: embedded-wheel
-        uses: actions/cache/restore@v4
-        with:
-          path: .embedded-wheel
-          # Deliberately no restore-keys: another source/build recipe is not reusable.
-          key: embedded-source-ubuntu22-x86_64-cp311-${{ hashFiles('.github/embedded-source.json', '.github/scripts/build-embedded-wheel.sh', '.github/scripts/embedded_wheel_manifest.py') }}
-
-      - name: Install embedded source build dependencies
-        if: matrix.test_mode == 'embedded' && steps.embedded-wheel.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git wget rpm rpm2cpio cpio make build-essential binutils m4 libtool-bin libncurses5 libaio1 libssl-dev zlib1g-dev
-
-      - name: Build embedded wheel from pinned fixed sources
-        if: matrix.test_mode == 'embedded' && steps.embedded-wheel.outputs.cache-hit != 'true'
-        run: bash .github/scripts/build-embedded-wheel.sh
-
-      - name: Verify and install the exact embedded source wheel
-        if: matrix.test_mode == 'embedded'
-        run: |
-          set -euo pipefail
-          # Needed even when the build cache was restored on a fresh runner.
-          sudo apt-get update
-          sudo apt-get install -y libaio1
-          python .github/scripts/embedded_wheel_manifest.py verify .github/embedded-source.json "$EMBEDDED_WHEEL_DIR"
-          uv pip install --python .venv/bin/python --no-deps --reinstall "$EMBEDDED_WHEEL_DIR"/*.whl
-          .venv/bin/python .github/scripts/embedded_wheel_manifest.py installed .github/embedded-source.json "$EMBEDDED_WHEEL_DIR"
-
-      - name: Save verified embedded source wheel
-        if: matrix.test_mode == 'embedded' && steps.embedded-wheel.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: .embedded-wheel
-          key: ${{ steps.embedded-wheel.outputs.cache-primary-key }}
-
-      - name: Record embedded wheel provenance
-        if: matrix.test_mode == 'embedded'
-        uses: actions/upload-artifact@v4
-        with:
-          name: embedded-wheel-provenance
-          include-hidden-files: true
-          path: |
-            .embedded-wheel/manifest.json
-            .embedded-wheel/seekdb-version.txt
-          if-no-files-found: error
-
       - name: Start OceanBase container
         if: matrix.test_mode == 'oceanbase'
         uses: oceanbase/setup-oceanbase-ce@v1
@@ -219,9 +160,6 @@ jobs:
       - name: Run integration tests for ${{ matrix.test_mode }}
         env:
           CI: 1
-          # GitHub-hosted runners can reach the canonical endpoint reliably;
-          # avoid making the suite depend on the China mirror's DNS state.
-          HF_ENDPOINT: https://huggingface.co
           SEEKDB_TEST_DATA_ROOT: ${{ github.workspace }}/.seekdb-test-data
           OB_PORT: 10000
           SERVER_PORT: 2881
@@ -233,27 +171,9 @@ jobs:
             log_level=INFO
           fi
           set -o pipefail
-          # Do not let uv replace the verified source wheel with uv.lock's release.
-          uv run --no-sync pytest tests/integration_tests/ -v --log-cli-level=${log_level} \
+          uv run pytest tests/integration_tests/ -v --log-cli-level=${log_level} \
             -k "${{ matrix.test_mode }}" | tee pytest.log
           bash .github/scripts/check-pytest-summary.sh pytest.log
-
-      - name: Preserve embedded full-text failure evidence
-        if: failure() && matrix.test_mode == 'embedded'
-        uses: actions/upload-artifact@v4
-        with:
-          name: embedded-fulltext-failure-${{ github.run_id }}-${{ github.run_attempt }}
-          # Only harness reports and bounded log excerpts, never database files.
-          include-hidden-files: true
-          path: |
-            .seekdb-test-data/artifacts/fts-*/summary.json
-            .seekdb-test-data/artifacts/fts-*/first-error.json
-            .seekdb-test-data/artifacts/fts-*/errors.jsonl
-            .seekdb-test-data/artifacts/fts-*/*-db-context.log
-            .seekdb-test-data/artifacts/fts-*/*-log-inventory.json
-            .seekdb-test-data/artifacts/fts-*/worker.log
-          if-no-files-found: warn
-          retention-days: 14
 
       - name: Run examples for ${{ matrix.test_mode }}
         env:
@@ -271,7 +191,7 @@ jobs:
             fi
 
             echo "Testing ${example_file} in ${MODE} mode"
-            if uv run --no-sync python "$example_file"; then
+            if uv run python "$example_file"; then
               echo "${example_file} passed"
             else
               status=$?

@@ -41,26 +41,15 @@ def _sparse_encoder_available() -> bool:
 
 
 @pytest.fixture(autouse=True)
-def mock_sparse_encoder():
-    """Keep unit tests deterministic and leave real model loading to integration tests."""
+def _clear_model_cache():
+    """Clear the class-level model cache before each test."""
     from pyseekdb.utils.embedding_functions.huggingface_sparse_embedding_function import (
         HuggingFaceSparseEmbeddingFunction,
     )
 
     saved = HuggingFaceSparseEmbeddingFunction.models.copy()
     HuggingFaceSparseEmbeddingFunction.models.clear()
-    with patch("sentence_transformers.SparseEncoder") as mock_encoder:
-        model = MagicMock()
-
-        def encode(documents):
-            vector = np.zeros(8, dtype=np.float32)
-            vector[2] = 0.75
-            return [vector.copy() for _ in documents]
-
-        model.encode_document.side_effect = encode
-        model.encode_query.side_effect = encode
-        mock_encoder.return_value = model
-        yield mock_encoder, model
+    yield
     HuggingFaceSparseEmbeddingFunction.models.clear()
     HuggingFaceSparseEmbeddingFunction.models.update(saved)
 
@@ -122,6 +111,15 @@ class TestHuggingFaceSparseEFInit:
 
         HuggingFaceSparseEmbeddingFunction(model_name="naver/splade-cocondenser-ensembledistil")
         HuggingFaceSparseEmbeddingFunction(model_name="naver/splade-v3-distilbert")
+
+
+@pytest.fixture
+def mock_sparse_encoder():
+    """Patch SparseEncoder so tests get a mock model; yields (MockEncoder, mock_instance)."""
+    with patch("sentence_transformers.SparseEncoder") as MockEncoder:
+        mock_instance = MagicMock()
+        MockEncoder.return_value = mock_instance
+        yield (MockEncoder, mock_instance)
 
 
 @pytest.mark.skipif(
@@ -194,7 +192,6 @@ class TestHuggingFaceSparseEFCall:
         arr = np.zeros(100, dtype=np.float32)
         arr[7] = 0.6
         arr[99] = 0.1
-        mock_model.encode_document.side_effect = None
         mock_model.encode_document.return_value = [arr]
 
         ef = HuggingFaceSparseEmbeddingFunction()
