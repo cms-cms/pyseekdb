@@ -1,6 +1,6 @@
 {
   "seekdb_repository": "https://github.com/cms-cms/seekdb.git",
-  "seekdb_sha": "b7c3883ff1564863c2f4e23275f89cb54548a994",
+  "seekdb_sha": "a459e66553491e96f7ad7f564b15adfd117f7686",
   "bindings_sha": "5e8eece63205dccfa9500f98893c91d1f50eb4f1",
   "fix_commit": "48b80f5193bcac0afafba4d4820aebdf1103bc69",
   "platform": "linux-x86_64",
