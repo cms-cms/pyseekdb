@@ -228,6 +228,17 @@ jobs:
             -k "${{ matrix.test_mode }}" | tee pytest.log
           bash .github/scripts/check-pytest-summary.sh pytest.log
 
+      - name: Upload embedded database diagnostics
+        if: failure() && matrix.test_mode == 'embedded'
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-database-diagnostics
+          include-hidden-files: true
+          path: |
+            .seekdb-test-data/
+            pytest.log
+          if-no-files-found: warn
+
       - name: Run examples for ${{ matrix.test_mode }}
         env:
           MODE: ${{ matrix.test_mode }}
