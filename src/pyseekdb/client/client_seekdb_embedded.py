@@ -20,12 +20,13 @@ from .sql_utils import render_sql_with_params
 
 
 def _load_embedded_runtime() -> tuple[Any | None, str | None]:
-    """Prefer the current ``seekdb`` binding, with legacy compatibility."""
+    """Prefer ``seekdb``; fall back only when the top-level binding is absent."""
     for distribution in ("seekdb", "pylibseekdb"):
         try:
             return importlib.import_module(distribution), distribution
-        except ImportError:
-            pass
+        except ModuleNotFoundError as exc:
+            if exc.name != distribution:
+                raise
     return None, None
 
 
